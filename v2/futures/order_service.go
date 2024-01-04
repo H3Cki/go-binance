@@ -129,7 +129,6 @@ func (s *CreateOrderService) ClosePosition(closePosition bool) *CreateOrderServi
 }
 
 func (s *CreateOrderService) createOrder(ctx context.Context, endpoint string, opts ...RequestOption) (data []byte, header *http.Header, err error) {
-
 	r := &request{
 		method:   http.MethodPost,
 		endpoint: endpoint,
@@ -227,6 +226,138 @@ type CreateOrderResponse struct {
 	PriceProtect      bool             `json:"priceProtect"`
 	RateLimitOrder10s string           `json:"rateLimitOrder10s,omitempty"`
 	RateLimitOrder1m  string           `json:"rateLimitOrder1m,omitempty"`
+}
+
+// ModifyOrderService modifies the order
+type ModifyOrderService struct {
+	c             *Client
+	orderID       *int64
+	clientOrderID *string
+	symbol        string
+	side          SideType
+	quantity      float64
+	price         float64
+}
+
+func (s *ModifyOrderService) OrderID(orderID int64) *ModifyOrderService {
+	s.orderID = &orderID
+	return s
+}
+
+func (s *ModifyOrderService) ClientOrderID(orderID string) *ModifyOrderService {
+	s.clientOrderID = &orderID
+	return s
+}
+
+// Symbol set symbol
+func (s *ModifyOrderService) Symbol(symbol string) *ModifyOrderService {
+	s.symbol = symbol
+	return s
+}
+
+// Side set side
+func (s *ModifyOrderService) Side(side SideType) *ModifyOrderService {
+	s.side = side
+	return s
+}
+
+// Side set side
+func (s *ModifyOrderService) Quantity(q float64) *ModifyOrderService {
+	s.quantity = q
+	return s
+}
+
+// Side set side
+func (s *ModifyOrderService) Price(p float64) *ModifyOrderService {
+	s.price = p
+	return s
+}
+
+func (s *ModifyOrderService) modifyOrder(ctx context.Context, endpoint string, opts ...RequestOption) (data []byte, header *http.Header, err error) {
+	r := &request{
+		method:   http.MethodPut,
+		endpoint: endpoint,
+		secType:  secTypeSigned,
+	}
+	m := params{
+		"symbol":   s.symbol,
+		"side":     s.side,
+		"quantity": s.quantity,
+		"price":    s.price,
+	}
+	if s.orderID != nil {
+		m["orderId"] = *s.orderID
+	}
+	if s.clientOrderID != nil {
+		m["origClientOrderid"] = *s.clientOrderID
+	}
+	r.setFormParams(m)
+	data, header, err = s.c.callAPI(ctx, r, opts...)
+	if err != nil {
+		return []byte{}, &http.Header{}, err
+	}
+	return data, header, nil
+}
+
+// Do send request
+func (s *ModifyOrderService) Do(ctx context.Context, opts ...RequestOption) (res *ModifyOrderResponse, err error) {
+	data, header, err := s.modifyOrder(ctx, "/fapi/v1/order", opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	apiErr := &common.APIError{}
+	if err := json.Unmarshal(data, apiErr); err != nil && apiErr.Code > 0 || apiErr.Message != "" {
+		return nil, apiErr
+	}
+
+	res = &ModifyOrderResponse{}
+
+	if err := json.Unmarshal(data, res); err != nil {
+		return nil, err
+	}
+
+	res.RateLimitOrder10s = header.Get("X-Mbx-Order-Count-10s")
+	res.RateLimitOrder1m = header.Get("X-Mbx-Order-Count-1m")
+	return res, nil
+}
+
+type ModifyOrderResponse struct {
+	Symbol            string           `json:"symbol"`
+	Pair              string           `json:"pair"`
+	OrderID           int64            `json:"orderId"`
+	ClientOrderID     string           `json:"clientOrderId"`
+	Price             string           `json:"price"`
+	OrigQuantity      string           `json:"origQty"`
+	ExecutedQuantity  string           `json:"executedQty"`
+	CumQuote          string           `json:"cumQuote"`
+	CumBase           string           `json:"cumBase"`
+	ReduceOnly        bool             `json:"reduceOnly"`
+	Status            OrderStatusType  `json:"status"`
+	StopPrice         string           `json:"stopPrice"`
+	TimeInForce       TimeInForceType  `json:"timeInForce"`
+	Type              OrderType        `json:"type"`
+	OrigType          OrderType        `json:"origType"`
+	Side              SideType         `json:"side"`
+	UpdateTime        int64            `json:"updateTime"`
+	WorkingType       WorkingType      `json:"workingType"`
+	ActivatePrice     string           `json:"activatePrice"`
+	PriceRate         string           `json:"priceRate"`
+	AvgPrice          string           `json:"avgPrice"`
+	PositionSide      PositionSideType `json:"positionSide"`
+	ClosePosition     bool             `json:"closePosition"`
+	PriceProtect      bool             `json:"priceProtect"`
+	RateLimitOrder10s string           `json:"rateLimitOrder10s,omitempty"`
+	RateLimitOrder1m  string           `json:"rateLimitOrder1m,omitempty"`
+	/*
+		NOT SET
+		{
+			"priceMatch": "NONE",              //price match mode
+			"selfTradePreventionMode": "NONE", //self trading preventation mode
+			"goodTillDate": 0      //order pre-set auot cancel time for TIF GTD order
+		}
+
+	*/
 }
 
 // ListOpenOrdersService list opened orders
