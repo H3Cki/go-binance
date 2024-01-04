@@ -570,6 +570,124 @@ func (s *CancelAllOpenOrdersService) Do(ctx context.Context, opts ...RequestOpti
 	return nil
 }
 
+type OrderModification struct {
+	OrderID       *int64   `json:"orderId,omitempty"`
+	ClientOrderID *int64   `json:"origClientOrderId,omitempty"`
+	Symbol        *string  `json:"symbol"`
+	Side          *string  `json:"side"`
+	BaseQuantity  *float64 `json:"quantity"`
+	Price         *float64 `json:"price"`
+}
+
+func (o OrderModification) validate() error {
+	errs := []error{}
+	if o.Symbol == nil {
+		errs = append(errs, errors.New("symbol is a mandatory field"))
+	}
+	if o.Side == nil {
+		errs = append(errs, errors.New("side is a mandatory field"))
+	}
+	if o.BaseQuantity == nil {
+		errs = append(errs, errors.New("quantity is a mandatory field"))
+	}
+	if o.Price == nil {
+		errs = append(errs, errors.New("price is a mandatory field"))
+	}
+	return errors.Join(errs...)
+}
+
+type ModifyMultipleOrdersResponse struct {
+	n      int
+	orders []*Order
+	errors []error
+}
+
+func newModifyMultipleOrdersResponse(n int) *ModifyMultipleOrdersResponse {
+	return &ModifyMultipleOrdersResponse{
+		n:      n,
+		orders: make([]*Order, n),
+		errors: make([]error, n),
+	}
+}
+
+// ModifyMultipleOrdersService cancel a list of orders
+type ModifyMultipleOrdersService struct {
+	c           *Client
+	batchOrders []OrderModification
+}
+
+// BatchOrders sets the list of order modifications
+func (s *ModifyMultipleOrdersService) BatchOrders(mods []OrderModification) *ModifyMultipleOrdersService {
+	s.batchOrders = mods
+	return s
+}
+
+func (s *ModifyMultipleOrdersService) validate() error {
+	errs := []error{}
+
+	maxOrders := 5
+	if len(s.batchOrders) > maxOrders {
+		errs = append(errs, fmt.Errorf("max number of batch orders is %d, got %d", maxOrders, len(s.batchOrders)))
+	}
+
+	for _, bo := range s.batchOrders {
+		if err := bo.validate(); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// Do send request
+func (s *ModifyMultipleOrdersService) Do(ctx context.Context, opts ...RequestOption) (res *ModifyMultipleOrdersResponse, err error) {
+	if err := s.validate(); err != nil {
+		return nil, err
+	}
+
+	r := &request{
+		method:   http.MethodPut,
+		endpoint: "/fapi/v1/batchOrders",
+		secType:  secTypeSigned,
+	}
+	r.setFormParam("batchOrders", s.batchOrders)
+	data, _, err := s.c.callAPI(ctx, r, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	rawMessages := make([]*json.RawMessage, 0)
+
+	err = json.Unmarshal(data, &rawMessages)
+	if err != nil {
+		return &ModifyMultipleOrdersResponse{}, err
+	}
+
+	resp := newModifyMultipleOrdersResponse(len(rawMessages))
+
+	errs := []error{}
+	for i, j := range rawMessages {
+		o := new(Order)
+		if err := json.Unmarshal(*j, o); err != nil {
+			return &ModifyMultipleOrdersResponse{}, err
+		}
+
+		if o.OrderID == 0 {
+			resp.orders[i] = o
+			continue
+		}
+
+		apiErr := &common.APIError{}
+		if err := json.Unmarshal(*j, apiErr); err != nil {
+			resp.errors[i] = err
+			continue
+		}
+
+		resp.errors[i] = apiErr
+	}
+
+	return resp, errors.Join(errs...)
+}
+
 // CancelMultiplesOrdersService cancel a list of orders
 type CancelMultiplesOrdersService struct {
 	c                     *Client
