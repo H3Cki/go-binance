@@ -663,8 +663,6 @@ func (s *ModifyMultipleOrdersService) Do(ctx context.Context, opts ...RequestOpt
 	}
 
 	resp := newModifyMultipleOrdersResponse(len(rawMessages))
-
-	errs := []error{}
 	for i, j := range rawMessages {
 		o := new(Order)
 		if err := json.Unmarshal(*j, o); err != nil {
@@ -685,7 +683,22 @@ func (s *ModifyMultipleOrdersService) Do(ctx context.Context, opts ...RequestOpt
 		resp.Errors[i] = apiErr
 	}
 
-	return resp, errors.Join(errs...)
+	return resp, errors.Join(resp.Errors...)
+}
+
+// CancelMultipleOrdersResponse
+type CancelMultipleOrdersResponse struct {
+	N      int
+	Orders []*CancelOrderResponse
+	Errors []error
+}
+
+func newCancelMultipleOrdersResponse(n int) *CancelMultipleOrdersResponse {
+	return &CancelMultipleOrdersResponse{
+		N:      n,
+		Orders: make([]*CancelOrderResponse, n),
+		Errors: make([]error, n),
+	}
 }
 
 // CancelMultiplesOrdersService cancel a list of orders
@@ -715,7 +728,7 @@ func (s *CancelMultiplesOrdersService) OrigClientOrderIDList(origClientOrderIDLi
 }
 
 // Do send request
-func (s *CancelMultiplesOrdersService) Do(ctx context.Context, opts ...RequestOption) (res []*CancelOrderResponse, err error) {
+func (s *CancelMultiplesOrdersService) Do(ctx context.Context, opts ...RequestOption) (res *CancelMultipleOrdersResponse, err error) {
 	r := &request{
 		method:   http.MethodDelete,
 		endpoint: "/fapi/v1/batchOrders",
@@ -734,12 +747,35 @@ func (s *CancelMultiplesOrdersService) Do(ctx context.Context, opts ...RequestOp
 	if err != nil {
 		return nil, err
 	}
-	res = make([]*CancelOrderResponse, 0)
-	err = json.Unmarshal(data, &res)
+
+	rawMessages := make([]*json.RawMessage, 0)
+	err = json.Unmarshal(data, &rawMessages)
 	if err != nil {
-		return []*CancelOrderResponse{}, err
+		return &CancelMultipleOrdersResponse{}, err
 	}
-	return res, nil
+
+	resp := newCancelMultipleOrdersResponse(len(rawMessages))
+	for i, j := range rawMessages {
+		// check if response is an API error
+		e := new(common.APIError)
+		if err := json.Unmarshal(*j, e); err != nil {
+			return nil, err
+		}
+
+		if e.Code > 0 || e.Message != "" {
+			resp.Errors[i] = e
+			continue
+		}
+
+		o := new(CancelOrderResponse)
+		if err := json.Unmarshal(*j, o); err != nil {
+			return nil, err
+		}
+
+		resp.Orders[i] = o
+	}
+
+	return resp, errors.Join(resp.Errors...)
 }
 
 // ListLiquidationOrdersService list liquidation orders
@@ -937,6 +973,7 @@ type CreateBatchOrdersResponse struct {
 func newCreateBatchOrdersResponse(n int) *CreateBatchOrdersResponse {
 	return &CreateBatchOrdersResponse{
 		N:      n,
+		Orders: make([]*Order, n),
 		Errors: make([]error, n),
 	}
 }
@@ -1009,19 +1046,17 @@ func (s *CreateBatchOrdersService) Do(ctx context.Context, opts ...RequestOption
 	r.setFormParams(m)
 
 	data, _, err := s.c.callAPI(ctx, r, opts...)
-
 	if err != nil {
 		return &CreateBatchOrdersResponse{}, err
 	}
 
 	rawMessages := make([]*json.RawMessage, 0)
-
 	err = json.Unmarshal(data, &rawMessages)
 	if err != nil {
 		return &CreateBatchOrdersResponse{}, err
 	}
 
-	batchCreateOrdersResponse := newCreateBatchOrdersResponse(len(rawMessages))
+	resp := newCreateBatchOrdersResponse(len(rawMessages))
 	for i, j := range rawMessages {
 		// check if response is an API error
 		e := new(common.APIError)
@@ -1030,7 +1065,7 @@ func (s *CreateBatchOrdersService) Do(ctx context.Context, opts ...RequestOption
 		}
 
 		if e.Code > 0 || e.Message != "" {
-			batchCreateOrdersResponse.Errors[i] = e
+			resp.Errors[i] = e
 			continue
 		}
 
@@ -1039,8 +1074,8 @@ func (s *CreateBatchOrdersService) Do(ctx context.Context, opts ...RequestOption
 			return nil, err
 		}
 
-		batchCreateOrdersResponse.Orders = append(batchCreateOrdersResponse.Orders, o)
+		resp.Orders[i] = o
 	}
 
-	return batchCreateOrdersResponse, nil
+	return resp, errors.Join(resp.Errors...)
 }
