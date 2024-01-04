@@ -597,16 +597,16 @@ func (o OrderModification) validate() error {
 }
 
 type ModifyMultipleOrdersResponse struct {
-	n      int
-	orders []*Order
-	errors []error
+	N      int
+	Orders []*Order
+	Errors []error
 }
 
 func newModifyMultipleOrdersResponse(n int) *ModifyMultipleOrdersResponse {
 	return &ModifyMultipleOrdersResponse{
-		n:      n,
-		orders: make([]*Order, n),
-		errors: make([]error, n),
+		N:      n,
+		Orders: make([]*Order, n),
+		Errors: make([]error, n),
 	}
 }
 
@@ -672,17 +672,17 @@ func (s *ModifyMultipleOrdersService) Do(ctx context.Context, opts ...RequestOpt
 		}
 
 		if o.OrderID == 0 {
-			resp.orders[i] = o
+			resp.Orders[i] = o
 			continue
 		}
 
 		apiErr := &common.APIError{}
 		if err := json.Unmarshal(*j, apiErr); err != nil {
-			resp.errors[i] = err
+			resp.Errors[i] = err
 			continue
 		}
 
-		resp.errors[i] = apiErr
+		resp.Errors[i] = apiErr
 	}
 
 	return resp, errors.Join(errs...)
