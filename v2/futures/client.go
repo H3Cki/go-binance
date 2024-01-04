@@ -441,6 +441,11 @@ func (c *Client) NewCreateBatchOrdersService() *CreateBatchOrdersService {
 	return &CreateBatchOrdersService{c: c}
 }
 
+// NewModifyMultipleOrdersService init modify multiple orders service
+func (c *Client) NewModifyMultipleOrdersService() *ModifyMultipleOrdersService {
+	return &ModifyMultipleOrdersService{c: c}
+}
+
 // NewGetOrderService init get order service
 func (c *Client) NewGetOrderService() *GetOrderService {
 	return &GetOrderService{c: c}
